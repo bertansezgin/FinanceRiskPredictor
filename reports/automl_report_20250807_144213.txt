@@ -1,0 +1,37 @@
+======================================================================
+AUTOML PİPELINE RAPORU
+======================================================================
+Tarih: 2025-08-07 14:42:13
+
+📊 MODEL BİLGİLERİ
+--------------------------------------------------
+En İyi Model: CatBoost
+Özellik Sayısı: 260
+Eğitim Seti Boyutu: (32681, 260)
+Test Seti Boyutu: (8171, 260)
+
+📈 PERFORMANS METRİKLERİ
+--------------------------------------------------
+Test R2 Score: 0.9998
+Test RMSE: 0.4502
+Test MAE: 0.0671
+Test MAPE: 78427183597591.7188
+
+Train R2 Score: 1.0000
+Train RMSE: 0.2103
+Overfitting Score: 0.0001
+
+🎯 EN ÖNEMLİ 10 ÖZELLİK
+--------------------------------------------------
+CollectionAskFER               27.6126
+TemerrütRiskSkoru              24.3840
+ProjectCollectionRuleId        18.0204
+KalanOran                      6.1996
+RemainingPrincipalAmount_log   5.2452
+Remaining_per_Total            4.6277
+EksikOdemeOrani                3.3645
+AccountSuffix_Collection       2.8365
+FinansalYukIndeksi             2.3583
+KalanOran_x_InstallmentCount   2.1247
+
+======================================================================

@@ -1,0 +1,40 @@
+============================================================
+MODEL DEĞERLENDİRME RAPORU
+============================================================
+
+🏆 EN İYİ MODEL: CatBoost
+   Test R2 Score: 0.9997
+   Test RMSE: 0.5588
+   CV R2 Mean: 0.9998 (±0.0001)
+
+📊 MODEL SIRALAMASI (Test R2'ye göre):
+----------------------------------------
+9. CatBoost             R2: 0.9997
+6. GradientBoosting     R2: 0.9995
+8. LightGBM             R2: 0.9993
+5. RandomForest         R2: 0.9992
+4. DecisionTree         R2: 0.9992
+7. AdaBoost             R2: 0.9945
+10. KNN                  R2: 0.9909
+1. LinearRegression     R2: 0.9867
+2. Lasso                R2: 0.9825
+3. ElasticNet           R2: 0.9693
+12. NeuralNetwork        R2: 0.9530
+11. SVM                  R2: 0.0195
+
+⚠️ OVERFITTING ANALİZİ:
+----------------------------------------
+CatBoost             ✅ Mükemmel (Score: 0.0002)
+GradientBoosting     ✅ Mükemmel (Score: 0.0005)
+LightGBM             ✅ Mükemmel (Score: 0.0007)
+RandomForest         ✅ Mükemmel (Score: 0.0007)
+DecisionTree         ✅ Mükemmel (Score: 0.0007)
+AdaBoost             ✅ Mükemmel (Score: 0.0005)
+KNN                  ✅ Mükemmel (Score: 0.0091)
+LinearRegression     ✅ Mükemmel (Score: 0.0005)
+Lasso                ✅ Mükemmel (Score: 0.0015)
+ElasticNet           ✅ Mükemmel (Score: 0.0028)
+NeuralNetwork        ✅ Mükemmel (Score: 0.0128)
+SVM                  ✅ Mükemmel (Score: 0.0170)
+
+============================================================
