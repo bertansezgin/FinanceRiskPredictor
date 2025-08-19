@@ -1,0 +1,22 @@
+{
+    "model_name": "GradientBoosting",
+    "model_path": "models/automl/best_model_GradientBoosting_20250819_050121.pkl",
+    "scaler_path": "models/automl/scaler_20250819_050121.pkl",
+    "features_path": "models/automl/features_20250819_050121.pkl",
+    "metrics": {
+        "model_name": "GradientBoosting",
+        "train_mse": 5.408286524103873,
+        "test_mse": 8.196205603891109,
+        "train_rmse": 2.325572300338967,
+        "test_rmse": 2.862901605695017,
+        "train_mae": 1.5824029451435824,
+        "test_mae": 1.6532005779691104,
+        "train_r2": 0.9629748372999979,
+        "test_r2": 0.9453520026808582,
+        "train_mape": 100.0,
+        "test_mape": 7.232418784076036,
+        "overfitting_score": 0.017622834619139716
+    },
+    "timestamp": "20250819_050121",
+    "n_features": 147
+}

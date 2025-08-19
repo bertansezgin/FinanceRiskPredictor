@@ -1,0 +1,37 @@
+======================================================================
+AUTOML PİPELINE RAPORU
+======================================================================
+Tarih: 2025-08-19 05:05:21
+
+📊 MODEL BİLGİLERİ
+--------------------------------------------------
+En İyi Model: GradientBoosting
+Özellik Sayısı: 135
+Eğitim Seti Boyutu: (32681, 135)
+Test Seti Boyutu: (8171, 135)
+
+📈 PERFORMANS METRİKLERİ
+--------------------------------------------------
+Test R2 Score: 0.4853
+Test RMSE: 10.5044
+Test MAE: 8.3308
+Test MAPE: 13.0509
+
+Train R2 Score: 0.5239
+Train RMSE: 9.9632
+Overfitting Score: 0.0387
+
+🎯 EN ÖNEMLİ 10 ÖZELLİK
+--------------------------------------------------
+VirtualInvoiceId               0.2752
+TotalCost                      0.1063
+DayCount                       0.0673
+ProfitAmount                   0.0653
+Noblg                          0.0615
+DeviceProfitAmount             0.0422
+BITTAmount                     0.0364
+TaksitBasinaAnapara            0.0324
+RateOfReturn                   0.0310
+TaksitYuku                     0.0234
+
+======================================================================

@@ -1,0 +1,10 @@
+{
+  "timestamp": "20250819_172234",
+  "best_model_name": "LightGBM",
+  "model_path": "models/automl/best_model_LightGBM_20250819_172234.pkl",
+  "scaler_path": "models/automl/scaler_20250819_172234.pkl",
+  "features_path": "models/automl/features_20250819_172234.pkl",
+  "feature_count": 171,
+  "hyperparams_optimized": false,
+  "n_trials": 30
+}
