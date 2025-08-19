@@ -1,236 +1,164 @@
 """
-Gelişmiş Feature Engineering
+DATA LEAKAGE TEMİZLENMİŞ Feature Engineering
+Sadece kredi verilirken bilinen değişkenler kullanılır
 """
 
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import StandardScaler, RobustScaler, MinMaxScaler
-from sklearn.preprocessing import PolynomialFeatures
-from sklearn.decomposition import PCA
-from sklearn.feature_selection import SelectKBest, f_regression, RFE
-from sklearn.feature_selection import mutual_info_regression
+from sklearn.preprocessing import StandardScaler, RobustScaler, PolynomialFeatures
 import warnings
 warnings.filterwarnings('ignore')
 
 
 class AdvancedFeatureEngineering:
-    """Gelişmiş özellik mühendisliği"""
+    """Data leakage temizlenmiş özellik mühendisliği
+    
+    PRENSIP: Sadece kredi verilirken bilinen bilgiler kullanılır
+    YASAK: Ödeme performansı, kalan borç, gerçek ödeme tarihleri
+    """
     
     def __init__(self):
         self.scaler = None
-        self.poly_features = None
-        self.pca = None
-        self.feature_selector = None
         self.feature_names = []
+        self.poly_transformer = None
         
     def create_advanced_features(self, df):
-        """Gelişmiş özellikler oluştur"""
+        """Temiz özellikler oluştur - Data leakage önlenmiş"""
         
         df = df.copy()
         
-        # Mevcut temel özellikleri koru
-        df = self._create_basic_features(df)
+        # SADECE BAŞLANGIÇTA BİLİNEN ÖZELLIKLER
+        df = self._create_clean_basic_features(df)
         
-        # Finansal risk özellikleri
-        df = self._create_financial_risk_features(df)
+        # Türetilmiş özellikler (Temiz kaynaklardan)
+        df = self._create_clean_derived_features(df)
         
-        # Zaman bazlı özellikler
-        df = self._create_temporal_features(df)
-        
-        # İstatistiksel özellikler
-        df = self._create_statistical_features(df)
-        
-        # Kategorik değişken encoding
-        df = self._encode_categorical_features(df)
+        # Zaman özellikleri (Sadece planlanan tarihler)
+        df = self._create_clean_temporal_features(df)
         
         return df
     
-    def _create_basic_features(self, df):
-        """Temel özellikler"""
+    def _create_clean_basic_features(self, df):
+        """Temel özellikler - SADECE KREDİ BAŞLANGICINDA BİLİNEN"""
         
-        # Güvenli doldurma
-        df['InstallmentCount'] = df['InstallmentCount'].fillna(1)
-        df['RemainingPrincipalAmount'] = df['RemainingPrincipalAmount'].fillna(0)
-        df['AmountTL'] = df['AmountTL'].fillna(0)
-        df['PrincipalAmount'] = df['PrincipalAmount'].fillna(1)
-        df['FundingAmount'] = df['FundingAmount'].fillna(0)
+        # YASAK: Bu sütunları ASLA kullanma!
+        from src.config import config
+        forbidden_columns = config.LEAKAGE_COLUMNS
         
-        # Temel oranlar
-        df['OrtalamaOdeme'] = df['AmountTL'] / df['InstallmentCount'].replace(0, 1)
-        df['KalanOran'] = df['RemainingPrincipalAmount'] / df['PrincipalAmount'].replace(0, 1)
-        df['KalanOran'] = df['KalanOran'].clip(0, 1)
+        for col in forbidden_columns:
+            if col in df.columns:
+                print(f"⚠️ UYARI: {col} sütunu LEAKAGE riski - kullanılmıyor!")
         
-        # Eksik ödeme oranı
-        df['EksikOdemeOrani'] = 1 - (df['AmountTL'] / df['PrincipalAmount'].replace(0, 1))
-        df['EksikOdemeOrani'] = df['EksikOdemeOrani'].clip(0, 1)
+        # SAFE: Kredi başvuru bilgileri
+        df['InstallmentCount'] = df['InstallmentCount'].fillna(12).astype(float)
+        df['PrincipalAmount'] = df['PrincipalAmount'].fillna(1000).astype(float)
+        df['FundingAmount'] = df['FundingAmount'].fillna(1000).astype(float)
+        df['MonthlyProfitRate'] = df['MonthlyProfitRate'].fillna(1.0).astype(float)
         
-        # Ödeme durumu
-        df['OdenmediMi'] = (df['AmountTL'] == 0).astype(float)
+        # SAFE: Planlanan tarihler
+        if 'ProjectDate' in df.columns:
+            df['ProjectDate'] = pd.to_datetime(df['ProjectDate'], errors='coerce')
+            df['KrediAyi'] = df['ProjectDate'].dt.month
+            df['KrediCeyregi'] = df['ProjectDate'].dt.quarter
+            df['KrediYili'] = df['ProjectDate'].dt.year
         
-        # Gecikme günleri
-        if 'TranDate' in df.columns and 'MaturityDate' in df.columns:
-            df['TranDate'] = pd.to_datetime(df['TranDate'], errors='coerce')
-            df['MaturityDate'] = pd.to_datetime(df['MaturityDate'], errors='coerce')
-            df['OverdueDays'] = (df['TranDate'] - df['MaturityDate']).dt.days
-            df['OverdueDays'] = df['OverdueDays'].apply(lambda x: max(x, 0) if pd.notnull(x) else 0)
-            df['VaktindenOnceOdeme'] = (df['TranDate'] < df['MaturityDate']).astype(int)
-        else:
-            df['OverdueDays'] = 0
-            df['VaktindenOnceOdeme'] = 0
-        
-        return df
-    
-    def _create_financial_risk_features(self, df):
-        """Finansal risk özellikleri"""
-        
-        # Kredi kullanım oranı
-        df['KrediKullanimOrani'] = df['AmountTL'] / df['FundingAmount'].replace(0, 1)
-        df['KrediKullanimOrani'] = df['KrediKullanimOrani'].clip(0, 2)
-        
-        # Taksit başına düşen ana para
+        # SAFE: Hesaplanabilir oranlar
         df['TaksitBasinaAnapara'] = df['PrincipalAmount'] / df['InstallmentCount'].replace(0, 1)
+        df['FonlamaOrani'] = df['FundingAmount'] / df['PrincipalAmount'].replace(0, 1)
+        df['FonlamaOrani'] = df['FonlamaOrani'].clip(0.5, 1.5)
         
-        # Ödeme düzenliliği skoru
-        df['OdemeDuzenlilik'] = np.where(df['OverdueDays'] == 0, 1,
-                                          np.where(df['OverdueDays'] <= 7, 0.8,
-                                                   np.where(df['OverdueDays'] <= 30, 0.5,
-                                                            np.where(df['OverdueDays'] <= 90, 0.2, 0))))
+        # SAFE: Tahmini aylık ödeme
+        df['TahminiAylikOdeme'] = df['TaksitBasinaAnapara'] * (1 + df['MonthlyProfitRate']/100)
         
-        # Risk kategorisi
-        df['RiskKategorisi'] = np.where(df['OverdueDays'] == 0, 0,  # Risksiz
-                                         np.where(df['OverdueDays'] <= 30, 1,  # Düşük risk
-                                                  np.where(df['OverdueDays'] <= 90, 2,  # Orta risk
-                                                           3)))  # Yüksek risk
+        # SAFE: Kategorik özellikler
+        df['KrediTutarKategorisi'] = pd.cut(
+            df['PrincipalAmount'],
+            bins=[0, 10000, 30000, 100000, float('inf')],
+            labels=[0, 1, 2, 3]
+        ).astype(float).fillna(1)
         
-        # Finansal yük indeksi
-        df['FinansalYukIndeksi'] = (df['RemainingPrincipalAmount'] * df['InstallmentCount']) / \
-                                    df['FundingAmount'].replace(0, 1)
+        df['TaksitSayisiKategorisi'] = pd.cut(
+            df['InstallmentCount'],
+            bins=[0, 6, 12, 24, 36, float('inf')],
+            labels=[0, 1, 2, 3, 4]
+        ).astype(float).fillna(2)
         
-        # Erken ödeme eğilimi
-        df['ErkenOdemeEgilimi'] = df.get('VaktindenOnceOdeme', 0) * \
-                                   (1 - df['EksikOdemeOrani'])
-        
-        # Toplam borç yükü
-        df['ToplamBorcYuku'] = df['RemainingPrincipalAmount'] + \
-                                (df['RemainingPrincipalAmount'] * 0.1)  # Tahmini faiz
-        
-        # Ödeme gücü skoru
-        df['OdemeGucuSkoru'] = (df['AmountTL'] / df['TaksitBasinaAnapara'].replace(0, 1)).clip(0, 2)
-        
-        # Temerrüt riski skoru
-        df['TemerrütRiskSkoru'] = (df['OverdueDays'] * 0.3 + 
-                                    df['EksikOdemeOrani'] * 100 * 0.4 +
-                                    df['OdenmediMi'] * 100 * 0.3)
+        df['FaizOraniKategorisi'] = pd.cut(
+            df['MonthlyProfitRate'],
+            bins=[0, 1, 2, 3, float('inf')],
+            labels=[0, 1, 2, 3]  # 0: Düşük faiz, 3: Yüksek faiz
+        ).astype(float).fillna(1)
         
         return df
     
-    def _create_temporal_features(self, df):
-        """Zaman bazlı özellikler"""
+    def _create_clean_derived_features(self, df):
+        """Türetilmiş özellikler - Sadece temiz değişkenlerden"""
         
-        if 'TranDate' in df.columns:
-            df['TranDate'] = pd.to_datetime(df['TranDate'], errors='coerce')
-            
-            # Ay, çeyrek yıl, yıl
-            df['OdemeAyi'] = df['TranDate'].dt.month
-            df['OdemeCeyregi'] = df['TranDate'].dt.quarter
-            df['OdemeYili'] = df['TranDate'].dt.year
-            df['OdemeGunu'] = df['TranDate'].dt.day
-            df['HaftaninGunu'] = df['TranDate'].dt.dayofweek
-            
-            # Ay sonu mu?
-            df['AySonuMu'] = (df['TranDate'].dt.day >= 25).astype(int)
-            
-            # Hafta sonu mu?
-            df['HaftaSonuMu'] = df['HaftaninGunu'].isin([5, 6]).astype(int)
-            
-            # Mevsim
-            df['Mevsim'] = df['OdemeAyi'].apply(lambda x: 
-                                                  1 if x in [12, 1, 2] else  # Kış
-                                                  2 if x in [3, 4, 5] else    # İlkbahar
-                                                  3 if x in [6, 7, 8] else    # Yaz
-                                                  4)                          # Sonbahar
-        
-        if 'MaturityDate' in df.columns:
-            df['MaturityDate'] = pd.to_datetime(df['MaturityDate'], errors='coerce')
-            
-            # Vade ayı özellikleri
-            df['VadeAyi'] = df['MaturityDate'].dt.month
-            df['VadeCeyregi'] = df['MaturityDate'].dt.quarter
-            
-        # Ödeme ve vade arasındaki gün farkı
-        if 'TranDate' in df.columns and 'MaturityDate' in df.columns:
-            df['OdemeVadeFarki'] = (df['TranDate'] - df['MaturityDate']).dt.days
-            
-        return df
-    
-    def _create_statistical_features(self, df):
-        """İstatistiksel özellikler"""
-        
-        # Log dönüşümleri (sıfırdan büyük değerler için)
-        for col in ['AmountTL', 'PrincipalAmount', 'FundingAmount', 'RemainingPrincipalAmount']:
+        # Log dönüşümleri - Sadece temiz değişkenler
+        for col in ['PrincipalAmount', 'FundingAmount', 'TahminiAylikOdeme']:
             if col in df.columns:
-                df[f'{col}_log'] = np.log1p(df[col].clip(lower=0))
+                df[f'{col}_log'] = np.log1p(df[col].clip(lower=1))
         
-        # Kare ve küp özellikler
-        df['OverdueDays_squared'] = df['OverdueDays'] ** 2
-        df['OverdueDays_cubed'] = df['OverdueDays'] ** 3
-        df['EksikOdemeOrani_squared'] = df['EksikOdemeOrani'] ** 2
+        # Kredi risk göstergeleri (Sadece başlangıç bilgileri)
+        df['KrediTutar_Taksit_Interaksiyon'] = df['PrincipalAmount'] * df['InstallmentCount']
+        df['Faiz_Vade_Etkisi'] = df['MonthlyProfitRate'] * df['InstallmentCount']
+        df['OdemeYuku_Oran'] = df['TahminiAylikOdeme'] / df['PrincipalAmount'].replace(0, 1)
         
-        # Etkileşim terimleri
-        df['OverdueDays_x_EksikOdeme'] = df['OverdueDays'] * df['EksikOdemeOrani']
-        df['KalanOran_x_InstallmentCount'] = df['KalanOran'] * df['InstallmentCount']
-        df['OdenmediMi_x_OverdueDays'] = df['OdenmediMi'] * df['OverdueDays']
+        # Üst seviye risk skorları (Başlangıç değerleri)
+        # Yüksek taksit sayısı + yüksek faiz = risk
+        df['VadeRiskSkoru'] = df['TaksitSayisiKategorisi'] * df['FaizOraniKategorisi']
         
-        # Bölme özellikleri
-        df['Amount_per_Installment'] = df['AmountTL'] / df['InstallmentCount'].replace(0, 1)
-        df['Remaining_per_Total'] = df['RemainingPrincipalAmount'] / df['PrincipalAmount'].replace(0, 1)
+        # Büyük kredi + uzun vade = risk
+        df['KrediRiskSkoru'] = df['KrediTutarKategorisi'] * df['TaksitSayisiKategorisi']
         
-        # Çarpım özellikleri
-        df['Total_Risk_Score'] = df['TemerrütRiskSkoru'] * df['RiskKategorisi']
+        # Matematiksel dönüşümler
+        df['PrincipalAmount_sqrt'] = np.sqrt(df['PrincipalAmount'].clip(lower=0))
+        df['InstallmentCount_square'] = df['InstallmentCount'] ** 2
         
-        return df
-    
-    def _encode_categorical_features(self, df):
-        """Kategorik değişkenleri encode et"""
+        # Ürün türü kodlaması (Kategorik değişken)
+        if 'ProductCode' in df.columns:
+            product_dummies = pd.get_dummies(df['ProductCode'], prefix='Product')
+            df = pd.concat([df, product_dummies], axis=1)
         
-        categorical_columns = ['ProductCode', 'PersonType', 'PortfolioClass', 'AgreementType']
-        
-        for col in categorical_columns:
-            if col in df.columns:
-                # Frequency encoding
-                freq_encoding = df[col].value_counts(normalize=True)
-                df[f'{col}_freq'] = df[col].map(freq_encoding).fillna(0)
-                
-                # Target encoding için hazırlık (gerçek uygulamada target ile yapılmalı)
-                # df[f'{col}_target_enc'] = ...
+        # Şube bilgisi (Coğrafi risk)
+        if 'BranchId' in df.columns:
+            # Basit şube kategorisi (daha güvenli)
+            branch_values = df['BranchId'].fillna(1)
+            df['BranchCategory'] = (branch_values % 5).astype(float)  # 0-4 arası kategoriler
         
         return df
     
-    def create_polynomial_features(self, X, degree=2):
-        """Polinomsal özellikler oluştur"""
+    def _create_clean_temporal_features(self, df):
+        """Zaman özellikleri - Sadece planlanan tarihler"""
         
-        # Sadece sayısal özellikleri seç
-        numeric_features = ['OverdueDays', 'EksikOdemeOrani', 'KalanOran', 
-                            'OdenmediMi', 'InstallmentCount', 'OrtalamaOdeme']
+        # Kredi başlangıç tarihi özellikleri
+        if 'ProjectDate' in df.columns:
+            df['ProjectDate'] = pd.to_datetime(df['ProjectDate'], errors='coerce')
+            
+            # Kredi başlangıç ayı (Mevsimsel risk)
+            df['KrediAyi'] = df['ProjectDate'].dt.month
+            df['KrediCeyregi'] = df['ProjectDate'].dt.quarter
+            df['KrediYili'] = df['ProjectDate'].dt.year
+            
+            # Ay sonu etkisi (Ödeme zorlukları)
+            df['AySonuKredi'] = (df['ProjectDate'].dt.day >= 25).astype(int)
+            
+            # Hafta sonu kredisi (Risk göstergesi olabilir)
+            df['HaftaSonuKredi'] = df['ProjectDate'].dt.dayofweek.isin([5, 6]).astype(int)
+            
+            # Mevsimsel özellikler
+            df['YazKredisi'] = df['KrediAyi'].isin([6, 7, 8]).astype(int)  # Yaz ayları
+            df['KisKredisi'] = df['KrediAyi'].isin([12, 1, 2]).astype(int)  # Kış ayları
+            
+        # İlk taksit tarihi özellikleri (Sadece planlanan)
+        if 'FirstInstallmentDate' in df.columns:
+            df['FirstInstallmentDate'] = pd.to_datetime(df['FirstInstallmentDate'], errors='coerce')
+            
+            # İlk ödeme ayı
+            df['IlkOdemeAyi'] = df['FirstInstallmentDate'].dt.month
+            df['IlkOdemeAySonu'] = (df['FirstInstallmentDate'].dt.day >= 25).astype(int)
         
-        X_numeric = X[numeric_features]
-        
-        self.poly_features = PolynomialFeatures(degree=degree, include_bias=False)
-        X_poly = self.poly_features.fit_transform(X_numeric)
-        
-        # Yeni özellik isimleri
-        poly_feature_names = self.poly_features.get_feature_names_out(numeric_features)
-        
-        # DataFrame'e çevir
-        X_poly_df = pd.DataFrame(X_poly, columns=poly_feature_names, index=X.index)
-        
-        # Orijinal özelliklerle birleştir
-        X_combined = pd.concat([X, X_poly_df], axis=1)
-        
-        # Duplicate sütunları kaldır
-        X_combined = X_combined.loc[:, ~X_combined.columns.duplicated()]
-        
-        return X_combined
+        return df
     
     def scale_features(self, X, method='robust'):
         """Özellikleri ölçeklendir"""
@@ -239,45 +167,96 @@ class AdvancedFeatureEngineering:
             self.scaler = StandardScaler()
         elif method == 'robust':
             self.scaler = RobustScaler()
-        elif method == 'minmax':
-            self.scaler = MinMaxScaler()
         else:
             raise ValueError(f"Bilinmeyen ölçeklendirme metodu: {method}")
         
-        X_scaled = self.scaler.fit_transform(X)
+        # Sadece sayısal sütunları ölçeklendir
+        numeric_cols = X.select_dtypes(include=[np.number]).columns
+        X_scaled = X.copy()
+        X_scaled[numeric_cols] = self.scaler.fit_transform(X[numeric_cols])
         
-        return pd.DataFrame(X_scaled, columns=X.columns, index=X.index)
+        return X_scaled
     
-    def select_best_features(self, X, y, method='mutual_info', k=20):
-        """En iyi özellikleri seç"""
+    def create_polynomial_features(self, X, degree=2):
+        """Polynomial özellikler oluştur - EKSİK OLAN FONKSİYON"""
         
-        if method == 'mutual_info':
-            selector = SelectKBest(score_func=mutual_info_regression, k=k)
-        elif method == 'f_regression':
-            selector = SelectKBest(score_func=f_regression, k=k)
+        if self.poly_transformer is None:
+            # Sadece en önemli sütunlarla polynomial features oluştur
+            # Çok fazla feature oluşmasını önle
+            important_cols = []
+            
+            # Sayısal sütunları seç
+            numeric_cols = X.select_dtypes(include=[np.number]).columns.tolist()
+            
+            # En önemlileri seç (max 10 sütun)
+            priority_keywords = ['Amount', 'Rate', 'Count', 'Kategori', 'Skor', 'log']
+            
+            for col in numeric_cols:
+                if any(keyword in col for keyword in priority_keywords):
+                    important_cols.append(col)
+            
+            # En fazla 10 sütun seç
+            important_cols = important_cols[:10] if len(important_cols) > 10 else important_cols
+            
+            # Hiç uygun sütun yoksa, ilk 5 sayısal sütunu al
+            if not important_cols and numeric_cols:
+                important_cols = numeric_cols[:5]
+            
+            if not important_cols:
+                # Fallback: Orijinal X'i döndür
+                return X
+            
+            # PolynomialFeatures oluştur
+            self.poly_transformer = PolynomialFeatures(
+                degree=degree, 
+                interaction_only=False, 
+                include_bias=False
+            )
+            
+            # Sadece seçili sütunlarla fit et
+            X_subset = X[important_cols]
+            X_poly_subset = self.poly_transformer.fit_transform(X_subset)
+            
+            # Sütun adlarını oluştur
+            poly_feature_names = self.poly_transformer.get_feature_names_out(important_cols)
+            
+            # Polynomial DataFrame oluştur
+            X_poly_df = pd.DataFrame(
+                X_poly_subset, 
+                columns=poly_feature_names,
+                index=X.index
+            )
+            
+            # Orijinal diğer sütunlarla birleştir
+            other_cols = [col for col in X.columns if col not in important_cols]
+            if other_cols:
+                X_result = pd.concat([X[other_cols], X_poly_df], axis=1)
+            else:
+                X_result = X_poly_df
+            
+            return X_result
+        
         else:
-            raise ValueError(f"Bilinmeyen özellik seçim metodu: {method}")
-        
-        X_selected = selector.fit_transform(X, y)
-        
-        # Seçilen özellik isimleri
-        selected_features = X.columns[selector.get_support()].tolist()
-        
-        self.feature_selector = selector
-        self.feature_names = selected_features
-        
-        return pd.DataFrame(X_selected, columns=selected_features, index=X.index)
-    
-    def apply_pca(self, X, n_components=0.95):
-        """PCA uygula"""
-        
-        self.pca = PCA(n_components=n_components)
-        X_pca = self.pca.fit_transform(X)
-        
-        # PCA bileşen isimleri
-        pca_columns = [f'PC{i+1}' for i in range(X_pca.shape[1])]
-        
-        return pd.DataFrame(X_pca, columns=pca_columns, index=X.index)
+            # Daha önce fit edilmiş transformer kullan
+            important_cols = list(self.poly_transformer.feature_names_in_)
+            X_subset = X[important_cols]
+            X_poly_subset = self.poly_transformer.transform(X_subset)
+            
+            poly_feature_names = self.poly_transformer.get_feature_names_out(important_cols)
+            
+            X_poly_df = pd.DataFrame(
+                X_poly_subset, 
+                columns=poly_feature_names,
+                index=X.index
+            )
+            
+            other_cols = [col for col in X.columns if col not in important_cols]
+            if other_cols:
+                X_result = pd.concat([X[other_cols], X_poly_df], axis=1)
+            else:
+                X_result = X_poly_df
+            
+            return X_result
     
     def get_feature_importance_from_model(self, model, feature_names):
         """Model bazlı özellik önem analizi"""

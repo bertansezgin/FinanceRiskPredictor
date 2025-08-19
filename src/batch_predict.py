@@ -103,7 +103,17 @@ def main():
     parser.add_argument("--data", dest="data_path", default="data/birlesik_risk_verisi.csv")
     parser.add_argument("--out", dest="output_path", default="reports/predictions_all.csv")
     parser.add_argument("--models", dest="models_dir", default="models/automl")
+    parser.add_argument("--risk-method", dest="risk_method", 
+                       choices=['deterministic', 'stochastic'],
+                       help="Risk calculation method: deterministic (explainable) or stochastic (complex)")
     args = parser.parse_args()
+    
+    # Update config if risk method specified
+    if args.risk_method:
+        from src.config import config
+        config.RISK_CALCULATION_CONFIG['method'] = args.risk_method
+        print(f"🎯 Risk method set to: {args.risk_method}")
+        print(f"📖 {config.RISK_CALCULATION_CONFIG['explanation'][args.risk_method]}")
 
     df_out = predict_all(args.data_path, args.output_path, args.models_dir)
     # Print brief summary

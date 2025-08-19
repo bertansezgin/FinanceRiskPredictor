@@ -1,305 +1,210 @@
 """
-AutoML System - Otomatik makine öğrenmesi pipeline'ı
+AutoML Sistemi - Risk Skorlaması için ML Pipeline
 """
 
-import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
-import joblib
+import pandas as pd
 import os
+import json
+import joblib
 from datetime import datetime
+from sklearn.model_selection import train_test_split, cross_val_score, KFold
+from sklearn.preprocessing import RobustScaler
+from sklearn.linear_model import Ridge
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
+from lightgbm import LGBMRegressor
+from catboost import CatBoostRegressor
+import warnings
+warnings.filterwarnings('ignore')
 
 from src.feature_engineering import AdvancedFeatureEngineering
 from src.advanced_models import AdvancedRiskModels
-from src.hyperparameter_tuning import HyperparameterOptimizer
-from src.model_evaluation import ModelEvaluator
+from src.risk_calculator import calculate_realistic_risk_score
+from src.config import config
 
 
 class AutoMLPipeline:
-    """Tam otomatik ML pipeline"""
+    """
+    Otomatik ML Pipeline - Risk skorlaması için end-to-end sistem
+    """
     
-    def __init__(self, task_type='regression', optimize_hyperparams=True, n_trials=30):
-        self.task_type = task_type
+    def __init__(self, optimize_hyperparams=False, n_trials=30):
         self.optimize_hyperparams = optimize_hyperparams
         self.n_trials = n_trials
-        
         self.feature_engineer = AdvancedFeatureEngineering()
-        self.model_trainer = AdvancedRiskModels()
-        self.hyperopt = HyperparameterOptimizer(n_trials=n_trials)
-        self.evaluator = ModelEvaluator()
-        
+        # Orijinal AdvancedRiskModels sınıfını kullan (duplicate değil)
+        self.models = AdvancedRiskModels()
+        self.scaler = None
+        self.feature_names = None
         self.best_model = None
         self.best_model_name = None
-        self.feature_names = None
-        self.results = {}
         
-    def prepare_data(self, df, target_col=None):
-        """Veri hazırlama"""
+    def run_automl(self, df):
+        """
+        Ana AutoML akışı - tam otomatik risk skorlaması
         
-        print("📊 Veri hazırlanıyor...")
-        
-        # Feature engineering
-        df = self.feature_engineer.create_advanced_features(df)
-        
-        # Target değişkeni oluştur (eğer verilmediyse)
-        if target_col is None:
-            from src.risk_calculator import calculate_risk_from_dataframe
-            # Risk skoru hesapla
-            df['RiskScore'] = calculate_risk_from_dataframe(df)
-            target_col = 'RiskScore'
-        
-        # Özellik seçimi
-        from src.config import config
-        exclude_cols = [target_col] + config.SYSTEM_COLUMNS
-        feature_cols = [col for col in df.columns if col not in exclude_cols]
-        
-        # Sadece sayısal özellikleri al
-        numeric_cols = df[feature_cols].select_dtypes(include=[np.number]).columns.tolist()
-        
-        X = df[numeric_cols].fillna(0)
-        y = df[target_col].fillna(0)
-        
-        self.feature_names = numeric_cols
-        
-        print(f"✅ Veri hazırlandı: {X.shape[0]} satır, {X.shape[1]} özellik")
-        
-        return X, y
-    
-    def run_automl(self, df, target_col=None, test_size=0.2):
-        """AutoML pipeline'ı çalıştır"""
-        
-        print("="*60)
-        print("🚀 AutoML Pipeline Başlıyor...")
-        print("="*60)
-        
-        # 1. Veri hazırlama
-        X, y = self.prepare_data(df, target_col)
-        
-        # 2. Train-test split
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=test_size, random_state=42
-        )
-        print(f"✅ Train set: {X_train.shape}, Test set: {X_test.shape}")
-        
-        # 3. Feature scaling
-        print("🔄 Özellikler ölçeklendiriliyor...")
-        scaler = StandardScaler()
-        X_train_scaled = scaler.fit_transform(X_train)
-        X_test_scaled = scaler.transform(X_test)
-        
-        # DataFrame'e çevir
-        X_train_scaled = pd.DataFrame(X_train_scaled, columns=X_train.columns, index=X_train.index)
-        X_test_scaled = pd.DataFrame(X_test_scaled, columns=X_test.columns, index=X_test.index)
-        
-        # 4. Model eğitimi
-        if self.optimize_hyperparams:
-            print("\n🔧 Hyperparameter optimizasyonu yapılıyor...")
-            optimization_results = self.hyperopt.optimize_all_models(X_train_scaled, y_train)
+        Args:
+            df: Ham veri DataFrame
             
-            # En iyi modelleri kullan
-            self.best_model_name = max(optimization_results.keys(), 
-                                       key=lambda x: optimization_results[x]['cv_score'])
-            self.best_model = self.hyperopt.best_models[self.best_model_name]
-            
-            print(f"\n✅ Optimizasyon tamamlandı. En iyi model: {self.best_model_name}")
-            
+        Returns:
+            dict: Sonuçlar ve metrikler
+        """
+        print("🚀 AutoML Pipeline başlıyor...")
+        
+        # 1. Feature Engineering
+        print("\n📊 Feature engineering...")
+        df_features = self.feature_engineer.create_advanced_features(df)
+        
+        # 2. TEMPORAL TARGET oluştur - Config'e göre metod seç
+        risk_method = config.RISK_CALCULATION_CONFIG['method']
+        print(f"🎯 {risk_method.title()} temporal risk skoru hesaplanıyor...")
+        print(f"   📋 {config.RISK_CALCULATION_CONFIG['explanation'][risk_method]}")
+        
+        if risk_method == 'deterministic':
+            from src.risk_calculator import calculate_deterministic_risk_score
+            df_features['RiskScore'] = calculate_deterministic_risk_score(df_features)
+        else:  # stochastic
+            from src.risk_calculator import calculate_temporal_risk_score
+            df_features['RiskScore'] = calculate_temporal_risk_score(df_features)
+        
+        print(f"✅ Target istatistikleri:")
+        print(f"   📊 Ortalama: {df_features['RiskScore'].mean():.2f}")
+        print(f"   📈 Std: {df_features['RiskScore'].std():.2f}")
+        print(f"   📉 Min-Max: [{df_features['RiskScore'].min():.1f}, {df_features['RiskScore'].max():.1f}]")
+        
+        # 3. TEMPORAL FILTER - Sadece feature period
+        print("📅 Temporal filtering yapılıyor...")
+        if risk_method == 'deterministic':
+            from src.risk_calculator import deterministic_calculator
+            df_filtered = deterministic_calculator.filter_feature_period_projects(df_features)
+        else:  # stochastic
+            from src.risk_calculator import temporal_calculator
+            df_filtered = temporal_calculator.filter_feature_period_projects(df_features)
+        
+        print(f"📅 Temporal filtering:")
+        print(f"   🔢 Önceki kayıt sayısı: {len(df_features)}")
+        print(f"   🔢 Sonraki kayıt sayısı: {len(df_filtered)}")
+        
+        # 4. Feature seçimi - SAFE ONLY
+        print("🔍 Safe feature selection...")
+        safe_feature_cols = [col for col in df_filtered.columns 
+                            if col in config.SAFE_FEATURES and col in df_filtered.columns]
+        
+        # Sadece numerik safe features kullan (correlation için)
+        X_all = df_filtered[safe_feature_cols].fillna(0)
+        X = X_all.select_dtypes(include=[np.number])  # Sadece numerik
+        y = df_filtered['RiskScore']
+        
+        print(f"🔍 Feature selection:")
+        print(f"   📊 Safe feature sayısı: {len(safe_feature_cols)}")
+        print(f"   📊 Numerik feature sayısı: {len(X.columns)}")
+        print(f"   ✅ Safe features only!")
+        
+        # 5. Data leakage kontrolü
+        print("\n🔍 Data leakage kontrolü...")
+        
+        correlation_check = X.corrwith(y).abs().sort_values(ascending=False)
+        high_corr_features = correlation_check[correlation_check > 0.8]
+        
+        if len(high_corr_features) > 0:
+            print(f"⚠️ UYARI: {len(high_corr_features)} feature yüksek korelasyon!")
+            for feature, corr in high_corr_features.items():
+                print(f"   🚨 {feature}: {corr:.3f}")
         else:
-            print("\n📊 Modeller eğitiliyor...")
-            results_df = self.model_trainer.train_all_models(
-                X_train_scaled, y_train, X_test_scaled, y_test
-            )
-            
-            # En iyi modeli seç
-            self.best_model_name, self.best_model = self.model_trainer.get_best_model()
-            print(f"\n✅ En iyi model: {self.best_model_name}")
+            print("✅ Data leakage kontrolü BAŞARILI!")
         
-        # 5. Model değerlendirme
-        print("\n📈 Model değerlendiriliyor...")
-        metrics, y_pred_train, y_pred_test = self.evaluator.evaluate_model(
-            self.best_model, X_train_scaled, y_train, X_test_scaled, y_test, 
-            self.best_model_name
+        # 4. Train-test split
+        print("📈 Veri bölünüyor...")
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.2, random_state=42
         )
         
-        # 6. Sonuçları kaydet
-        self.results = {
-            'best_model': self.best_model,
+        # 5. Scaling
+        print("⚖️ Ölçeklendirme...")
+        self.scaler = RobustScaler()
+        X_train_scaled = pd.DataFrame(
+            self.scaler.fit_transform(X_train),
+            columns=X_train.columns,
+            index=X_train.index
+        )
+        X_test_scaled = pd.DataFrame(
+            self.scaler.transform(X_test),
+            columns=X_test.columns,
+            index=X_test.index
+        )
+        
+        # 6. Model eğitimi
+        print("🤖 Modeller eğitiliyor...")
+        results_df = self.models.train_all_models(X_train_scaled, y_train, X_test_scaled, y_test)
+        
+        # 7. En iyi modeli bul
+        self.best_model_name, self.best_model = self.models.get_best_model()
+        print(f"\n🏆 En iyi model: {self.best_model_name}")
+        
+        # 8. Feature names kaydet
+        self.feature_names = X_train.columns.tolist()
+        
+        # 9. Modeli kaydet
+        self._save_model_artifacts()
+        
+        # 10. Sonuçları hazırla
+        metrics = self._calculate_metrics(X_test_scaled, y_test)
+        
+        return {
             'best_model_name': self.best_model_name,
+            'best_model': self.best_model,
+            'results_df': results_df,
             'metrics': metrics,
-            'scaler': scaler,
             'feature_names': self.feature_names,
-            'X_train': X_train_scaled,
-            'X_test': X_test_scaled,
-            'y_train': y_train,
-            'y_test': y_test,
-            'y_pred_train': y_pred_train,
-            'y_pred_test': y_pred_test
+            'scaler': self.scaler
         }
-        
-        # 7. Model ve scaler'ı kaydet
-        self.save_model(self.best_model, scaler)
-        
-        # 8. Rapor oluştur
-        self.generate_report()
-        
-        print("\n" + "="*60)
-        print("✅ AutoML Pipeline Tamamlandı!")
-        print("="*60)
-        
-        return self.results
     
-    def save_model(self, model, scaler):
-        """Modeli ve scaler'ı kaydet"""
-        
-        # Dizin oluştur
-        os.makedirs('models/automl', exist_ok=True)
+    def _save_model_artifacts(self):
+        """Model artefaktlarını kaydet"""
         
         # Timestamp
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         
-        # Model kaydet
-        model_path = f'models/automl/best_model_{self.best_model_name}_{timestamp}.pkl'
-        joblib.dump(model, model_path)
-        print(f"✅ Model kaydedildi: {model_path}")
+        # Dosya yolları
+        model_path = f"models/automl/best_model_{self.best_model_name}_{timestamp}.pkl"
+        scaler_path = f"models/automl/scaler_{timestamp}.pkl"
+        features_path = f"models/automl/features_{timestamp}.pkl"
+        info_path = f"models/automl/model_info_{timestamp}.json"
         
-        # Scaler kaydet
-        scaler_path = f'models/automl/scaler_{timestamp}.pkl'
-        joblib.dump(scaler, scaler_path)
-        print(f"✅ Scaler kaydedildi: {scaler_path}")
-        
-        # Feature names kaydet
-        features_path = f'models/automl/features_{timestamp}.pkl'
+        # Kaydet
+        os.makedirs("models/automl", exist_ok=True)
+        joblib.dump(self.best_model, model_path)
+        joblib.dump(self.scaler, scaler_path)
         joblib.dump(self.feature_names, features_path)
-        print(f"✅ Feature names kaydedildi: {features_path}")
         
-        # Model bilgilerini kaydet
+        # Model bilgileri
         model_info = {
-            'model_name': self.best_model_name,
+            'timestamp': timestamp,
+            'best_model_name': self.best_model_name,
             'model_path': model_path,
             'scaler_path': scaler_path,
             'features_path': features_path,
-            'metrics': self.results.get('metrics', {}),
-            'timestamp': timestamp,
-            'n_features': len(self.feature_names)
+            'feature_count': len(self.feature_names),
+            'hyperparams_optimized': self.optimize_hyperparams,
+            'n_trials': self.n_trials
         }
         
-        import json
-        info_path = f'models/automl/model_info_{timestamp}.json'
         with open(info_path, 'w') as f:
-            json.dump(model_info, f, indent=4, default=str)
-        print(f"✅ Model bilgileri kaydedildi: {info_path}")
-        
-    def generate_report(self):
-        """Detaylı rapor oluştur"""
-        
-        # Dizin oluştur
-        os.makedirs('reports', exist_ok=True)
-        
-        report = []
-        report.append("="*70)
-        report.append("AUTOML PİPELINE RAPORU")
-        report.append("="*70)
-        report.append(f"Tarih: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        report.append("")
-        
-        # Model bilgileri
-        report.append("📊 MODEL BİLGİLERİ")
-        report.append("-"*50)
-        report.append(f"En İyi Model: {self.best_model_name}")
-        report.append(f"Özellik Sayısı: {len(self.feature_names)}")
-        report.append(f"Eğitim Seti Boyutu: {self.results['X_train'].shape}")
-        report.append(f"Test Seti Boyutu: {self.results['X_test'].shape}")
-        report.append("")
-        
-        # Performans metrikleri
-        metrics = self.results['metrics']
-        report.append("📈 PERFORMANS METRİKLERİ")
-        report.append("-"*50)
-        report.append(f"Test R2 Score: {metrics['test_r2']:.4f}")
-        report.append(f"Test RMSE: {metrics['test_rmse']:.4f}")
-        report.append(f"Test MAE: {metrics['test_mae']:.4f}")
-        report.append(f"Test MAPE: {metrics['test_mape']:.4f}")
-        report.append("")
-        report.append(f"Train R2 Score: {metrics['train_r2']:.4f}")
-        report.append(f"Train RMSE: {metrics['train_rmse']:.4f}")
-        report.append(f"Overfitting Score: {metrics['overfitting_score']:.4f}")
-        report.append("")
-        
-        # Özellik önemi (eğer varsa)
-        if hasattr(self.best_model, 'feature_importances_'):
-            report.append("🎯 EN ÖNEMLİ 10 ÖZELLİK")
-            report.append("-"*50)
+            json.dump(model_info, f, indent=2)
             
-            importance_df = pd.DataFrame({
-                'feature': self.feature_names,
-                'importance': self.best_model.feature_importances_
-            }).sort_values('importance', ascending=False)
-            
-            for idx, row in importance_df.head(10).iterrows():
-                report.append(f"{row['feature']:<30} {row['importance']:.4f}")
-            report.append("")
+        print(f"✅ Model kaydedildi: {model_path}")
         
-        # Hyperparameter bilgileri
-        if self.optimize_hyperparams and self.hyperopt.best_params:
-            report.append("🔧 OPTİMİZE EDİLMİŞ HYPERPARAMETRELER")
-            report.append("-"*50)
-            
-            if self.best_model_name in self.hyperopt.best_params:
-                for param, value in self.hyperopt.best_params[self.best_model_name].items():
-                    report.append(f"{param:<25} {value}")
-            report.append("")
+    def _calculate_metrics(self, X_test, y_test):
+        """Test metriklerini hesapla"""
         
-        report.append("="*70)
+        y_pred = self.best_model.predict(X_test)
         
-        # Raporu kaydet
-        report_text = "\n".join(report)
-        
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        report_path = f'reports/automl_report_{timestamp}.txt'
-        
-        with open(report_path, 'w', encoding='utf-8') as f:
-            f.write(report_text)
-        
-        print(f"\n📄 Rapor kaydedildi: {report_path}")
-        
-        # Raporu ekrana da yazdır
-        print("\n" + report_text)
-        
-        return report_text
-    
-    def predict_new_data(self, new_data_path):
-        """Yeni veri için tahmin yap"""
-        
-        if self.best_model is None:
-            raise ValueError("Önce model eğitilmeli!")
-        
-        # Veriyi yükle
-        new_df = pd.read_csv(new_data_path)
-        
-        # Feature engineering
-        new_df = self.feature_engineer.create_advanced_features(new_df)
-        
-        # Aynı özellikleri seç
-        X_new = new_df[self.feature_names].fillna(0)
-        
-        # Scale
-        if 'scaler' in self.results:
-            X_new_scaled = self.results['scaler'].transform(X_new)
-        else:
-            X_new_scaled = X_new
-        
-        # Tahmin
-        predictions = self.best_model.predict(X_new_scaled)
-        
-        # Sonuçları DataFrame'e ekle
-        new_df['PredictedRiskScore'] = predictions
-        new_df['PredictedRiskScore'] = new_df['PredictedRiskScore'].clip(0, 100)
-        
-        # Risk kategorisi
-        new_df['RiskCategory'] = pd.cut(
-            new_df['PredictedRiskScore'],
-            bins=[0, 25, 50, 75, 100],
-            labels=['Yüksek Risk', 'Orta Risk', 'Düşük Risk', 'Çok Düşük Risk']
-        )
-        
-        return new_df[['ProjectId', 'PredictedRiskScore', 'RiskCategory']]
+        return {
+            'test_r2': r2_score(y_test, y_pred),
+            'test_rmse': np.sqrt(mean_squared_error(y_test, y_pred)),
+            'test_mae': mean_absolute_error(y_test, y_pred),
+            'model_name': self.best_model_name
+        }
+
+

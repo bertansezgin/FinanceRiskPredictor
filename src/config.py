@@ -54,6 +54,16 @@ class Config:
         'n_jobs': -1
     }
     
+    # Risk hesaplama metodları
+    RISK_CALCULATION_CONFIG = {
+        'method': 'deterministic',  # 'deterministic' veya 'stochastic' 
+        'target_months': 6,         # Risk değerlendirme periyodu
+        'explanation': {
+            'deterministic': 'İş kuralları tabanlı, explainable AI yaklaşımı',
+            'stochastic': 'Karmaşık stokastik modelleme, gerçekçi dağılım'
+        }
+    }
+    
     # Feature engineering parametreleri
     FEATURE_CONFIG = {
         'polynomial_degree': 2,
@@ -78,19 +88,118 @@ class Config:
     
     # Sistem sütunları (feature engineering'de hariç tutulacak)
     SYSTEM_COLUMNS = [
+        # Sistem/ID sütunları
         'ProjectId', 'ProposalId', 'BranchId', 'AccountNumber',
         'TranDate', 'MaturityDate', 'PaymentDate',
         'UpdateSystemDate', 'CreateSystemDate',
         'UpdateUserName', 'CreateUserName',
         'UpdateHostName', 'CreateHostName',
-        'Guid'
+        'Guid', 'UserName', 'HostName', 'Status',
+        
+        # DATA LEAKAGE ÖNLEMELERİ
+        
+        # 1. Target ile doğrudan ilişkili (türetilmiş risk skorları)
+        'TemerrütRiskSkoru',        # Target'ın formülünün benzeri
+        'Total_Risk_Score',         # Target'ın türevi
+        'RiskValue',                # Önceden hesaplanmış risk
+        'OdemeGucuSkoru',           # AmountTL kullanıyor
+        'Amount_per_Installment',   # AmountTL kullanıyor
+        
+        # 2. Tahsilat SONRASI bilgiler (Future Information)
+        'CollectionAskFER',         # Tahsilat sonrası döviz kuru
+        'CollectionBidFER',         # Tahsilat sonrası alış kuru
+        'CollectionExchangeFec',    # Tahsilat döviz tipi
+        'CollectionStatus',         # Tahsilat durumu
+        'ProjectCollectionId',      # Tahsilat ID
+        'ProjectCollectionRuleId',  # Tahsilat kural ID
+        'ProjectCollectionBankId',  # Tahsilat banka ID
+        'ProjectCollectionId_Bank', # Tahsilat banka ID
+        'AccountNumber_Collection', # Tahsilat hesap no
+        'AccountSuffix_Collection', # Tahsilat hesap eki
+        'Amount_Collection',        # Tahsilat tutarı
+        'AmountTL',                # Tahsil edilen TL tutarı
+        'AmountFEC',               # Tahsil edilen döviz tutarı
+        'PaymentAmount',           # Ödeme tutarı
+        'DiscountAmount',          # İndirim tutarı
+        'CollectionSource',        # Tahsilat kaynağı
+        'CollectionType',          # Tahsilat tipi
+        'TranBranchId_Collection', # Tahsilat şube
+        'ChannelId_Collection',    # Tahsilat kanal
+        'UserName_Collection',     # Tahsilat kullanıcı
+        'HostName_Collection',     # Tahsilat host
+        'SystemDate_Collection',   # Tahsilat sistem tarihi
+        'UpdateUserName_Collection',
+        'UpdateHostName_Collection',
+        'UpdateSystemDate_Collection',
+        'HostIP_Collection',
+        
+        # 3. Karmaşık türetilmiş özellikler (fazlalık)
+        'OverdueDays_squared',
+        'OverdueDays_cubed',
+        'EksikOdemeOrani_squared',
+        'OverdueDays_x_EksikOdeme',
+        'OdenmediMi_x_OverdueDays',
+        
+        # 4. Diğer gereksiz/belirsiz sütunlar
+        'AccrualFER',
+        'AccruedExcDiffBITTAmount',
+        'AccruedExcDiffRUSFAmount',
+        'SurplusProfitAmount',
+        'IncentiveProfitSupportAmount',
+    ] + []  # LEAKAGE_COLUMNS will be added below
+    
+    # SAFE feature'lar - Sadece kredi başlangıcında bilinen
+    SAFE_FEATURES = [
+        # Kredi başvuru bilgileri
+        'ProjectDate', 'InstallmentCount', 'PrincipalAmount', 
+        'FundingAmount', 'MonthlyProfitRate',
+        
+        # Kategorik bilgiler
+        'BranchId', 'ProductCode', 'PortfolioClass', 
+        'PersonType', 'PaymentType', 'AgreementType',
+        
+        # Türetilmiş güvenli özellikler
+        'TaksitBasinaAnapara', 'FonlamaOrani', 'KrediAyi', 
+        'KrediCeyregi', 'KrediTutarKategorisi', 'TaksitSayisiKategorisi',
+        'KrediYili', 'AySonuKredi', 'HaftaSonuKredi', 'YazKredisi', 'KisKredisi',
+        'IlkOdemeAyi', 'IlkOdemeAySonu', 'BaslangicIlkTaksitGun',
+        'TahminiAylikOdeme', 'FaizOraniKategorisi', 'BranchCategory',
+        
+        # Log transformed features (safe)
+        'PrincipalAmount_log', 'FundingAmount_log', 'TahminiAylikOdeme_log',
+        
+        # Interaction features (safe)
+        'KrediTutar_Taksit_Interaksiyon', 'Faiz_Vade_Etkisi', 'OdemeYuku_Oran',
+        'VadeRiskSkoru', 'KrediRiskSkoru', 'PrincipalAmount_sqrt', 'InstallmentCount_square',
+        
+        # Ek güvenli özellikler
+        'IsMortgage', 'CollateralType', 'GoodsOrServiceType',
+        'DebtFECType', 'MortgageType', 'CampaignDetailId', 'FranchiserId',
+    ]
+
+    # LEAKAGE sütunları - ASLA kullanma!
+    LEAKAGE_COLUMNS = [
+        'AmountTL', 'TranDate', 'RemainingPrincipalAmount',
+        'PaymentAmount', 'CollectionStatus', 'ProjectCollectionId',
+        'ProjectCollectionRuleId', 'Amount_Collection', 'AmountFEC',
+        'DiscountAmount', 'PaymentDate_Bank', 'TransactionType',
+        'CollectionAskFER', 'CollectionBidFER', 'CollectionExchangeFec',
+        'ProjectCollectionBankId', 'ProjectCollectionId_Bank', 
+        'AccountNumber_Collection', 'AccountSuffix_Collection',
+        'CollectionSource', 'CollectionType', 'TranBranchId_Collection',
+        'ChannelId_Collection', 'UserName_Collection', 'HostName_Collection',
+        'SystemDate_Collection', 'UpdateUserName_Collection',
+        'UpdateHostName_Collection', 'UpdateSystemDate_Collection',
+        'HostIP_Collection', 'MaturityDate', 'PaymentDate',
     ]
     
-    # Temel feature'lar
-    BASE_FEATURES = [
-        'OverdueDays', 'EksikOdemeOrani', 'KalanOran', 
-        'OdenmediMi', 'InstallmentCount', 'OrtalamaOdeme'
-    ]
+    # Temel feature'lar (backward compatibility)
+    BASE_FEATURES = SAFE_FEATURES.copy()
+    
+    @classmethod
+    def get_system_columns_with_leakage(cls):
+        """SYSTEM_COLUMNS + LEAKAGE_COLUMNS birleşimi döndür"""
+        return cls.SYSTEM_COLUMNS + cls.LEAKAGE_COLUMNS
     
     @classmethod
     def get_data_path(cls, filename: str) -> Path:

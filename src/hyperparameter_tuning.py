@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import cross_val_score, KFold
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
-from xgboost import XGBRegressor
+# XGBoost kaldırıldı - projede kullanılmıyor
 from lightgbm import LGBMRegressor
 from catboost import CatBoostRegressor
 import warnings
@@ -66,48 +66,9 @@ class HyperparameterOptimizer:
         
         return study.best_params, study.best_value
     
-    def optimize_xgboost(self, X_train, y_train):
-        """XGBoost için hyperparameter optimizasyonu"""
-        
-        def objective(trial):
-            params = {
-                'n_estimators': trial.suggest_int('n_estimators', 50, 300),
-                'max_depth': trial.suggest_int('max_depth', 3, 15),
-                'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
-                'subsample': trial.suggest_float('subsample', 0.6, 1.0),
-                'colsample_bytree': trial.suggest_float('colsample_bytree', 0.6, 1.0),
-                'min_child_weight': trial.suggest_int('min_child_weight', 1, 10),
-                'gamma': trial.suggest_float('gamma', 0, 0.5),
-                'reg_alpha': trial.suggest_float('reg_alpha', 0, 1.0),
-                'reg_lambda': trial.suggest_float('reg_lambda', 0, 1.0),
-                'random_state': self.random_state,
-                'n_jobs': -1
-            }
-            
-            model = XGBRegressor(**params)
-            cv_scores = cross_val_score(
-                model, X_train, y_train,
-                cv=KFold(n_splits=self.cv_folds, shuffle=True, random_state=self.random_state),
-                scoring='r2',
-                n_jobs=-1
-            )
-            
-            return cv_scores.mean()
-        
-        study = optuna.create_study(direction='maximize', study_name='XGBoost')
-        study.optimize(objective, n_trials=self.n_trials)
-        
-        self.best_params['XGBoost'] = study.best_params
-        self.study_results['XGBoost'] = study
-        
-        # En iyi parametrelerle modeli eğit
-        best_model = XGBRegressor(**study.best_params, random_state=self.random_state, n_jobs=-1)
-        best_model.fit(X_train, y_train)
-        self.best_models['XGBoost'] = best_model
-        
-        print(f"✅ XGBoost optimizasyonu tamamlandı. Best CV R2: {study.best_value:.4f}")
-        
-        return study.best_params, study.best_value
+    # XGBoost optimize fonksiyonu kaldırıldı - projede XGBoost kullanılmıyor
+    # def optimize_xgboost(self, X_train, y_train):
+    #     pass
     
     def optimize_lightgbm(self, X_train, y_train):
         """LightGBM için hyperparameter optimizasyonu"""
@@ -250,12 +211,12 @@ class HyperparameterOptimizer:
         except Exception as e:
             print(f"❌ RandomForest optimizasyonu başarısız: {str(e)}")
         
-        # XGBoost
-        try:
-            params, score = self.optimize_xgboost(X_train, y_train)
-            results['XGBoost'] = {'params': params, 'cv_score': score}
-        except Exception as e:
-            print(f"❌ XGBoost optimizasyonu başarısız: {str(e)}")
+        # XGBoost kaldırıldı - projede kullanılmıyor
+        # try:
+        #     params, score = self.optimize_xgboost(X_train, y_train)
+        #     results['XGBoost'] = {'params': params, 'cv_score': score}
+        # except Exception as e:
+        #     print(f"❌ XGBoost optimizasyonu başarısız: {str(e)}")
         
         # LightGBM
         try:

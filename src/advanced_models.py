@@ -1,228 +1,277 @@
 """
-Gelişmiş makine öğrenmesi modelleri
+GELİŞTİRİLMİŞ Makine Öğrenmesi Modelleri
+Data leakage temizlenmiş, optimize edilmiş parametreler
 """
 
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor, AdaBoostRegressor
-from sklearn.svm import SVR
-from sklearn.neural_network import MLPRegressor
-from sklearn.linear_model import Ridge, Lasso, ElasticNet
-from sklearn.tree import DecisionTreeRegressor
-from sklearn.neighbors import KNeighborsRegressor
-from xgboost import XGBRegressor
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from sklearn.linear_model import Ridge
 from lightgbm import LGBMRegressor
 from catboost import CatBoostRegressor
-from sklearn.model_selection import cross_val_score, KFold
+from sklearn.model_selection import cross_val_score, KFold, TimeSeriesSplit
 from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 import warnings
 warnings.filterwarnings('ignore')
 
 
 class AdvancedRiskModels:
-    """Gelişmiş risk tahmin modelleri"""
+    """Sadeleştirilmiş risk tahmin modelleri"""
     
     def __init__(self):
         self.models = {
-            # Linear Models
-            'LinearRegression': Ridge(alpha=1.0),
-            'Lasso': Lasso(alpha=0.1, max_iter=1000),
-            'ElasticNet': ElasticNet(alpha=0.1, l1_ratio=0.5, max_iter=1000),
+            # Baseline model - Güçlendirilmiş
+            'Ridge': Ridge(alpha=10.0, solver='auto'),
             
-            # Tree-based Models
-            'DecisionTree': DecisionTreeRegressor(
-                max_depth=10,
-                min_samples_split=20,
-                min_samples_leaf=10,
-                random_state=42
-            ),
+            # Optimize edilmiş modeller - Daha iyi parametreler
             'RandomForest': RandomForestRegressor(
-                n_estimators=100,
-                max_depth=15,
-                min_samples_split=10,
-                min_samples_leaf=5,
+                n_estimators=200,          # Artırıldı
+                max_depth=15,              # Artırıldı
+                min_samples_split=5,       # Azaltıldı
+                min_samples_leaf=2,        # Azaltıldı
+                max_features=0.8,          # Eklendi
+                bootstrap=True,
+                oob_score=True,           # Eklendi
                 random_state=42,
                 n_jobs=-1
             ),
+            
             'GradientBoosting': GradientBoostingRegressor(
-                n_estimators=100,
-                learning_rate=0.1,
-                max_depth=5,
-                min_samples_split=10,
-                min_samples_leaf=5,
-                random_state=42
-            ),
-            'AdaBoost': AdaBoostRegressor(
-                n_estimators=100,
-                learning_rate=1.0,
+                n_estimators=150,          # Artırıldı
+                learning_rate=0.08,        # Azaltıldı (daha stabil)
+                max_depth=6,               # Artırıldı
+                min_samples_split=5,       # Azaltıldı
+                min_samples_leaf=3,        # Azaltıldı
+                subsample=0.9,             # Eklendi (regularization)
+                max_features=0.8,          # Eklendi
                 random_state=42
             ),
             
-            # Advanced Boosting Models
-            'XGBoost': XGBRegressor(
-                n_estimators=100,
-                learning_rate=0.1,
-                max_depth=6,
-                min_child_weight=1,
-                gamma=0,
-                subsample=0.8,
-                colsample_bytree=0.8,
-                random_state=42,
-                n_jobs=-1
-            ),
             'LightGBM': LGBMRegressor(
-                n_estimators=100,
-                learning_rate=0.1,
-                max_depth=10,
-                num_leaves=31,
-                min_child_samples=20,
-                subsample=0.8,
-                colsample_bytree=0.8,
+                n_estimators=200,          # Artırıldı
+                learning_rate=0.08,        # Azaltıldı
+                max_depth=8,               # Artırıldı
+                num_leaves=50,             # Artırıldı
+                min_child_samples=10,      # Eklendi
+                subsample=0.9,             # Eklendi
+                colsample_bytree=0.8,      # Eklendi
+                reg_alpha=0.1,             # Regularization
+                reg_lambda=0.1,            # Regularization
                 random_state=42,
                 n_jobs=-1,
                 verbosity=-1
             ),
-            'CatBoost': CatBoostRegressor(
-                iterations=100,
-                learning_rate=0.1,
-                depth=6,
-                l2_leaf_reg=3,
-                random_state=42,
-                verbose=False
-            ),
             
-            # Other Models
-            'KNN': KNeighborsRegressor(
-                n_neighbors=10,
-                weights='distance',
-                algorithm='auto'
-            ),
-            'SVM': SVR(
-                kernel='rbf',
-                C=1.0,
-                epsilon=0.1
-            ),
-            'NeuralNetwork': MLPRegressor(
-                hidden_layer_sizes=(100, 50),
-                activation='relu',
-                solver='adam',
-                learning_rate='adaptive',
-                max_iter=500,
-                random_state=42
+            'CatBoost': CatBoostRegressor(
+                iterations=200,            # Artırıldı
+                learning_rate=0.08,        # Azaltıldı
+                depth=8,                   # Artırıldı
+                l2_leaf_reg=5,             # Regularization
+                bootstrap_type='Bernoulli', # Eklendi
+                subsample=0.9,             # Eklendi
+                random_seed=42,
+                verbose=False,
+                allow_writing_files=False
             )
         }
         
         self.trained_models = {}
         self.model_scores = {}
+    
+    def _safe_mape(self, y_true, y_pred):
+        """MAPE hesaplama - sıfıra bölme hatası önlenmiş"""
+        # Sıfır değerleri filtrele
+        mask = y_true != 0
+        if mask.sum() == 0:
+            return 0.0
         
-    def train_all_models(self, X_train, y_train, X_test, y_test):
-        """Tüm modelleri eğit ve performanslarını değerlendir"""
+        y_true_safe = y_true[mask]
+        y_pred_safe = y_pred[mask]
+        
+        # MAPE hesapla
+        mape = np.mean(np.abs((y_true_safe - y_pred_safe) / y_true_safe)) * 100
+        # Makul bir aralığa sınırla
+        return min(mape, 100.0)
+    
+    def train_model(self, model_name, X_train, y_train, X_test=None, y_test=None, cv_strategy='kfold'):
+        """
+        Tek bir modeli eğit - Geliştirilmiş CV stratejisi
+        
+        cv_strategy: 'kfold' | 'timeseries' | 'stratified'
+        """
+        
+        if model_name not in self.models:
+            raise ValueError(f"Model bulunamadı: {model_name}")
+        
+        try:
+            model = self.models[model_name]
+            
+            # Modeli eğit
+            model.fit(X_train, y_train)
+            
+            # Cross-validation stratejisi seç
+            if cv_strategy == 'timeseries':
+                cv = TimeSeriesSplit(n_splits=5)
+            elif cv_strategy == 'kfold':
+                cv = KFold(n_splits=5, shuffle=True, random_state=42)
+            else:
+                cv = KFold(n_splits=5, shuffle=True, random_state=42)
+            
+            # Cross-validation skoru
+            cv_scores = cross_val_score(
+                model, X_train, y_train, 
+                cv=cv,
+                scoring='r2',
+                n_jobs=-1
+            )
+            
+            # Alternatif metrikler de hesapla
+            neg_mse_scores = cross_val_score(
+                model, X_train, y_train,
+                cv=cv,
+                scoring='neg_mean_squared_error',
+                n_jobs=-1
+            )
+            
+            # Test skoru (varsa)
+            test_score = None
+            test_rmse = None
+            test_mae = None
+            if X_test is not None and y_test is not None:
+                y_pred = model.predict(X_test)
+                test_score = r2_score(y_test, y_pred)
+                test_rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+                test_mae = mean_absolute_error(y_test, y_pred)
+            
+            self.trained_models[model_name] = model
+            self.model_scores[model_name] = {
+                'cv_score': cv_scores.mean(),
+                'cv_std': cv_scores.std(),
+                'cv_rmse': np.sqrt(-neg_mse_scores.mean()),
+                'test_score': test_score,
+                'test_rmse': test_rmse,
+                'test_mae': test_mae
+            }
+            
+            return model, cv_scores.mean(), test_score
+            
+        except Exception as e:
+            print(f"❌ {model_name} modeli eğitilirken hata: {e}")
+            return None, None, None
+    
+    def train_all_models(self, X_train, y_train, X_test=None, y_test=None, cv_strategy='kfold'):
+        """
+        Tüm modelleri eğit ve karşılaştır - Geliştirilmiş
+        
+        cv_strategy: Cross-validation stratejisi ('kfold' veya 'timeseries')
+        """
         
         results = []
         
-        for name, model in self.models.items():
-            print(f"\n📊 {name} modeli eğitiliyor...")
+        print(f"\n🔄 CV Strategy: {cv_strategy}")
+        print(f"📊 {len(self.models)} model eğitiliyor...")
+        print("-" * 60)
+        
+        for i, model_name in enumerate(self.models.keys(), 1):
+            print(f"\n[{i}/{len(self.models)}] 🤖 {model_name} modeli eğitiliyor...")
             
-            try:
-                # Model eğitimi
-                model.fit(X_train, y_train)
-                self.trained_models[name] = model
-                
-                # Tahminler
-                y_pred_train = model.predict(X_train)
-                y_pred_test = model.predict(X_test)
-                
-                # Metrikler
-                train_mse = mean_squared_error(y_train, y_pred_train)
-                test_mse = mean_squared_error(y_test, y_pred_test)
-                train_r2 = r2_score(y_train, y_pred_train)
-                test_r2 = r2_score(y_test, y_pred_test)
-                train_mae = mean_absolute_error(y_train, y_pred_train)
-                test_mae = mean_absolute_error(y_test, y_pred_test)
-                
-                # Cross-validation (5-fold)
-                cv_scores = cross_val_score(
-                    model, X_train, y_train, 
-                    cv=KFold(n_splits=5, shuffle=True, random_state=42),
-                    scoring='r2',
-                    n_jobs=-1
-                )
+            model, cv_score, test_score = self.train_model(
+                model_name, X_train, y_train, X_test, y_test, cv_strategy
+            )
+            
+            if model is not None:
+                scores = self.model_scores[model_name]
                 
                 result = {
-                    'Model': name,
-                    'Train_MSE': train_mse,
-                    'Test_MSE': test_mse,
-                    'Train_R2': train_r2,
-                    'Test_R2': test_r2,
-                    'Train_MAE': train_mae,
-                    'Test_MAE': test_mae,
-                    'CV_R2_Mean': cv_scores.mean(),
-                    'CV_R2_Std': cv_scores.std(),
-                    'Overfitting_Score': abs(train_r2 - test_r2)
+                    'Model': model_name,
+                    'CV R2': cv_score,
+                    'CV RMSE': scores['cv_rmse'],
+                    'Test R2': test_score if test_score is not None else np.nan,
+                    'Test RMSE': scores['test_rmse'] if scores['test_rmse'] is not None else np.nan,
+                    'Test MAE': scores['test_mae'] if scores['test_mae'] is not None else np.nan
                 }
-                
                 results.append(result)
-                self.model_scores[name] = result
                 
-                print(f"✅ {name} - Test R2: {test_r2:.4f}, CV R2: {cv_scores.mean():.4f} (±{cv_scores.std():.4f})")
-                
-            except Exception as e:
-                print(f"❌ {name} modeli eğitilirken hata: {str(e)}")
-                continue
+                # Detaylı sonuç yazdırma
+                if test_score is not None:
+                    print(f"✅ {model_name}:")
+                    print(f"   📈 CV R2: {cv_score:.4f} (±{scores['cv_std']:.4f})")
+                    print(f"   🎯 Test R2: {test_score:.4f}")
+                    print(f"   📉 Test RMSE: {scores['test_rmse']:.3f}")
+                    print(f"   📊 Test MAE: {scores['test_mae']:.3f}")
+                else:
+                    print(f"✅ {model_name}:")
+                    print(f"   📈 CV R2: {cv_score:.4f} (±{scores['cv_std']:.4f})")
+                    print(f"   📉 CV RMSE: {scores['cv_rmse']:.3f}")
+            else:
+                print(f"❌ {model_name} modeli eğitilemedi!")
         
-        # Sonuçları DataFrame'e çevir
-        results_df = pd.DataFrame(results)
-        results_df = results_df.sort_values('Test_R2', ascending=False)
+        print("\n" + "=" * 60)
+        print("🏆 MODEL KARŞILAŞTIRMA TAMAMLANDI")
+        print("=" * 60)
+        
+        results_df = pd.DataFrame(results).sort_values('CV R2', ascending=False)
+        
+        if len(results_df) > 0:
+            print(f"\n🥇 En iyi model: {results_df.iloc[0]['Model']} (CV R2: {results_df.iloc[0]['CV R2']:.4f})")
         
         return results_df
     
-    def get_best_model(self, metric='Test_R2'):
+    def get_best_model(self):
         """En iyi modeli döndür"""
-        if not self.model_scores:
-            raise ValueError("Henüz hiçbir model eğitilmedi!")
         
-        best_model_name = max(self.model_scores.keys(), 
-                              key=lambda x: self.model_scores[x][metric])
+        if not self.model_scores:
+            return None, None
+        
+        # CV skoruna göre en iyi model
+        best_model_name = max(
+            self.model_scores.keys(),
+            key=lambda x: self.model_scores[x]['cv_score']
+        )
         
         return best_model_name, self.trained_models[best_model_name]
     
-    def get_ensemble_predictions(self, X, models_to_use=None, weights=None):
-        """Ensemble tahmin yap"""
-        if models_to_use is None:
-            # En iyi 3 modeli kullan
-            sorted_models = sorted(self.model_scores.keys(), 
-                                   key=lambda x: self.model_scores[x]['Test_R2'], 
-                                   reverse=True)[:3]
-            models_to_use = sorted_models
+    def predict(self, model_name, X):
+        """Belirli bir model ile tahmin yap"""
         
-        if weights is None:
-            weights = [1/len(models_to_use)] * len(models_to_use)
+        if model_name not in self.trained_models:
+            raise ValueError(f"Eğitilmiş model bulunamadı: {model_name}")
         
-        predictions = []
-        for model_name in models_to_use:
-            if model_name in self.trained_models:
-                pred = self.trained_models[model_name].predict(X)
-                predictions.append(pred)
-        
-        # Ağırlıklı ortalama
-        ensemble_pred = np.average(predictions, axis=0, weights=weights)
-        
-        return ensemble_pred
+        return self.trained_models[model_name].predict(X)
     
-    def get_feature_importance(self, feature_names):
-        """Feature importance analizi"""
-        importance_dict = {}
+    def evaluate_model(self, model_name, X_test, y_test):
+        """Model performansını değerlendir"""
         
-        # Tree-based modeller için feature importance
-        tree_models = ['RandomForest', 'GradientBoosting', 'XGBoost', 'LightGBM', 'CatBoost']
+        if model_name not in self.trained_models:
+            raise ValueError(f"Eğitilmiş model bulunamadı: {model_name}")
         
-        for model_name in tree_models:
-            if model_name in self.trained_models:
-                model = self.trained_models[model_name]
-                if hasattr(model, 'feature_importances_'):
-                    importance_dict[model_name] = pd.DataFrame({
-                        'feature': feature_names,
-                        'importance': model.feature_importances_
-                    }).sort_values('importance', ascending=False)
+        model = self.trained_models[model_name]
+        y_pred = model.predict(X_test)
         
-        return importance_dict
+        metrics = {
+            'R2 Score': r2_score(y_test, y_pred),
+            'RMSE': np.sqrt(mean_squared_error(y_test, y_pred)),
+            'MAE': mean_absolute_error(y_test, y_pred),
+            'MAPE': self._safe_mape(y_test, y_pred)
+        }
+        
+        return metrics, y_pred
+    
+    def get_feature_importance(self, model_name, feature_names):
+        """Özellik önem skorlarını al"""
+        
+        if model_name not in self.trained_models:
+            return None
+        
+        model = self.trained_models[model_name]
+        
+        # Feature importance destekleyen modeller
+        if hasattr(model, 'feature_importances_'):
+            importance_df = pd.DataFrame({
+                'feature': feature_names,
+                'importance': model.feature_importances_
+            }).sort_values('importance', ascending=False)
+            
+            return importance_df
+        
+        return None
