@@ -88,7 +88,17 @@ def predict_all(
     })
 
     # Risk category bins (ensure 0 included)
-    from src.risk_calculator import get_risk_category
+    # from src.risk_calculator import get_risk_category  # Removed - using local function
+    
+    def get_risk_category(risk_scores):
+        """Risk kategorilerini belirle - local function"""
+        import pandas as pd
+        return pd.cut(
+            risk_scores,
+            bins=[0, 30, 50, 70, 100],
+            labels=['Yüksek Risk', 'Orta Risk', 'Düşük Risk', 'Çok Düşük Risk'],
+            include_lowest=True
+        )
     out["RiskCategory"] = get_risk_category(out["PredictedRiskScore"])
 
     # Save

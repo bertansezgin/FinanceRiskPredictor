@@ -50,17 +50,16 @@ class Config:
         'test_size': 0.2,
         'random_state': 42,
         'cv_folds': 5,
-        'n_trials': 30,  # Hyperparameter tuning için
+    
         'n_jobs': -1
     }
     
     # Risk hesaplama metodları
     RISK_CALCULATION_CONFIG = {
-        'method': 'deterministic',  # 'deterministic' veya 'stochastic' 
-        'target_months': 6,         # Risk değerlendirme periyodu
+        'method': 'historical_performance',  # Sadece historical_performance - diğerleri data leakage riski nedeniyle kaldırıldı
+        'target_months': 6,                  # Risk değerlendirme periyodu
         'explanation': {
-            'deterministic': 'İş kuralları tabanlı, explainable AI yaklaşımı',
-            'stochastic': 'Karmaşık stokastik modelleme, gerçekçi dağılım'
+            'historical_performance': 'Gerçek payment data tabanlı - SIFIR leakage riski, hiç input feature kullanmıyor'
         }
     }
     
@@ -191,6 +190,9 @@ class Config:
         'SystemDate_Collection', 'UpdateUserName_Collection',
         'UpdateHostName_Collection', 'UpdateSystemDate_Collection',
         'HostIP_Collection', 'MaturityDate', 'PaymentDate',
+        # SON 2 EKSİK SÜTUN
+        'Amount',      # Target hesaplamada kullanılıyor
+        'ProjectId',   # Target hesaplamada kullanılıyor
     ]
     
     # Temel feature'lar (backward compatibility)
@@ -259,92 +261,10 @@ class Config:
         
         logger.info("Logging konfigüre edildi")
     
-    @classmethod
-    def load_custom_config(cls, config_file: Optional[str] = None) -> Dict[str, Any]:
-        """
-        Özel konfigürasyon dosyasını yükle
-        
-        Args:
-            config_file: Konfigürasyon dosyası yolu
-            
-        Returns:
-            Konfigürasyon dictionary'si
-        """
-        if config_file is None:
-            config_file = cls.PROJECT_ROOT / "config.json"
-        
-        try:
-            if os.path.exists(config_file):
-                with open(config_file, 'r', encoding='utf-8') as f:
-                    custom_config = json.load(f)
-                logger.info(f"Özel konfigürasyon yüklendi: {config_file}")
-                return custom_config
-            else:
-                logger.info("Özel konfigürasyon dosyası bulunamadı, varsayılan ayarlar kullanılıyor")
-                return {}
-        except Exception as e:
-            logger.error(f"Konfigürasyon yükleme hatası: {e}")
-            return {}
-    
-    @classmethod
-    def save_config_template(cls, output_file: Optional[str] = None):
-        """
-        Konfigürasyon template'ini kaydet
-        
-        Args:
-            output_file: Çıktı dosyası yolu
-        """
-        if output_file is None:
-            output_file = cls.PROJECT_ROOT / "config_template.json"
-        
-        template = {
-            "risk_weights": cls.RISK_WEIGHTS,
-            "risk_categories": cls.RISK_CATEGORIES,
-            "model_config": cls.MODEL_CONFIG,
-            "feature_config": cls.FEATURE_CONFIG,
-            "logging_config": {
-                "level": cls.LOGGING_CONFIG['level'],
-                "format": cls.LOGGING_CONFIG['format']
-            }
-        }
-        
-        try:
-            with open(output_file, 'w', encoding='utf-8') as f:
-                json.dump(template, f, indent=2, ensure_ascii=False)
-            logger.info(f"Konfigürasyon template'i kaydedildi: {output_file}")
-        except Exception as e:
-            logger.error(f"Konfigürasyon template kaydetme hatası: {e}")
 
 
-class ValidationConfig:
-    """Veri doğrulama konfigürasyonu"""
-    
-    # Gerekli sütunlar
-    REQUIRED_COLUMNS = [
-        'ProjectId', 'InstallmentCount', 'RemainingPrincipalAmount',
-        'AmountTL', 'PrincipalAmount'
-    ]
-    
-    # Sütun veri tipleri
-    COLUMN_TYPES = {
-        'ProjectId': 'int64',
-        'InstallmentCount': 'int64',
-        'RemainingPrincipalAmount': 'float64',
-        'AmountTL': 'float64',
-        'PrincipalAmount': 'float64',
-        'FundingAmount': 'float64'
-    }
-    
-    # Değer aralıkları
-    VALUE_RANGES = {
-        'InstallmentCount': (1, 120),
-        'RemainingPrincipalAmount': (0, float('inf')),
-        'AmountTL': (0, float('inf')),
-        'PrincipalAmount': (0, float('inf'))
-    }
-    
-    # Maksimum eksik değer oranı
-    MAX_MISSING_RATIO = 0.5
+
+
 
 
 # Global config instance

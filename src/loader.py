@@ -117,14 +117,3 @@ def _basic_clean_only(df: pd.DataFrame) -> pd.DataFrame:
     return df_clean
 
 
-# Backward compatibility - eski fonksiyonlar
-def clean_data(df: pd.DataFrame) -> pd.DataFrame:
-    """Deprecated - backward compatibility için"""
-    logger.warning("clean_data deprecated, _basic_clean_only kullanılıyor")
-    return _basic_clean_only(df)
-
-def generate_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Deprecated - AdvancedFeatureEngineering kullan"""
-    logger.warning("generate_features deprecated! AdvancedFeatureEngineering.create_advanced_features() kullan")
-    # Hiçbir feature oluşturma, sadece döndür
-    return df

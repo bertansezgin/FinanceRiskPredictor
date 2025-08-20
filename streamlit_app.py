@@ -75,7 +75,7 @@ def main():
                 with st.spinner("Model eğitiliyor... Lütfen bekleyin (1-2 dakika sürebilir)..."):
                     try:
                         # AutoML pipeline çalıştır
-                        automl = AutoMLPipeline(optimize_hyperparams=False)
+                        automl = AutoMLPipeline()
                         results = automl.run_automl(df)
                         
                         st.success("✅ Model eğitimi tamamlandı!")
